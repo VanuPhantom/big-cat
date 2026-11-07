@@ -6,7 +6,7 @@ Adds a Git log view to your OpenCode 2.0 installation.
 
 ---
 
-*Big Cat* adds a Git log to the top of your OpenCode TUI's right-hand sidebar.
+_Big Cat_ adds a Git log to the top of your OpenCode TUI's right-hand sidebar.
 It shows the current branch, recent commits, authors, and relative commit
 dates, and refreshes automatically every 15 seconds.
 
@@ -23,7 +23,7 @@ Then add it to your project's `opencode.jsonc`:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["big-cat"]
+  "plugins": ["big-cat"],
 }
 ```
 
@@ -32,7 +32,7 @@ For local development, reference this directory instead:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["/absolute/path/to/big-cat"]
+  "plugins": ["/absolute/path/to/big-cat"],
 }
 ```
 
@@ -59,9 +59,9 @@ session and Big Cat will appear in the sidebar.
   "plugins": [
     {
       "package": "big-cat",
-      "options": { "limit": 20 }
-    }
-  ]
+      "options": { "limit": 20 },
+    },
+  ],
 }
 ```
 

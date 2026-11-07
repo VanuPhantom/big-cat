@@ -1,4 +1,4 @@
-import { Rpc } from "@opencode/plugin/rpc"
+import { Rpc } from "@opencode/plugin/rpc";
 
 const commit = {
   type: "object",
@@ -10,7 +10,7 @@ const commit = {
   },
   required: ["hash", "author", "date", "subject"],
   additionalProperties: false,
-} as const
+} as const;
 
 const commitInput = {
   type: "object",
@@ -20,7 +20,7 @@ const commitInput = {
   },
   required: ["directory", "hash"],
   additionalProperties: false,
-} as const
+} as const;
 
 export const BigCat = Rpc.define({
   id: "big-cat",
@@ -70,4 +70,4 @@ export const BigCat = Rpc.define({
     },
   },
   events: {},
-} as const)
+} as const);

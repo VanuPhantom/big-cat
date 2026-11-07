@@ -1,38 +1,56 @@
-import { Plugin, usePlugin } from "@opencode/plugin/tui"
-import type { PanelInput } from "@opencode/plugin/tui/context"
-import { SyntaxStyle } from "@opentui/core"
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { BigCat } from "./rpc.js"
+import { Plugin, usePlugin } from "@opencode/plugin/tui";
+import type { PanelInput } from "@opencode/plugin/tui/context";
+import { SyntaxStyle } from "@opentui/core";
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
+import { BigCat } from "./rpc.js";
 
 type GitLog = {
-  repository: string
-  branch: string
-  commits: Array<{ hash: string; author: string; date: string; subject: string }>
-  message: string
-}
+  repository: string;
+  branch: string;
+  commits: Array<{
+    hash: string;
+    author: string;
+    date: string;
+    subject: string;
+  }>;
+  message: string;
+};
 
-type CommitDetails = { message: string }
-type CommitDiff = { diff: string }
-type DiffPanel = { commit: GitLog["commits"][number]; files: string[] }
+type CommitDetails = { message: string };
+type CommitDiff = { diff: string };
+type DiffPanel = { commit: GitLog["commits"][number]; files: string[] };
 
-const emptyLog: GitLog = { repository: "", branch: "", commits: [], message: "" }
+const emptyLog: GitLog = {
+  repository: "",
+  branch: "",
+  commits: [],
+  message: "",
+};
 
 function shorten(value: string, maxLength: number): string {
-  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
 function relativeDate(value: string): string {
-  const date = new Date(`${value}T00:00:00`)
-  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000)
-  if (!Number.isFinite(days) || days < 0) return value
-  if (days === 0) return "today"
-  if (days === 1) return "yesterday"
-  return `${days}d ago`
+  const date = new Date(`${value}T00:00:00`);
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (!Number.isFinite(days) || days < 0) return value;
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
 }
 
 function filetypeFromDiff(diff: string): string | undefined {
-  const path = diff.match(/^\+\+\+ b\/(.+)$/m)?.[1]
-  const extension = path?.split(".").pop()?.toLowerCase()
+  const path = diff.match(/^\+\+\+ b\/(.+)$/m)?.[1];
+  const extension = path?.split(".").pop()?.toLowerCase();
   return (
     {
       cjs: "javascript",
@@ -51,12 +69,12 @@ function filetypeFromDiff(diff: string): string | undefined {
       yml: "yaml",
       yaml: "yaml",
     } as Record<string, string>
-  )[extension ?? ""]
+  )[extension ?? ""];
 }
 
 function splitFileDiffs(diff: string): string[] {
-  const files = diff.split(/(?=^diff --git )/m).filter(Boolean)
-  return files.length > 0 ? files : [diff]
+  const files = diff.split(/(?=^diff --git )/m).filter(Boolean);
+  return files.length > 0 ? files : [diff];
 }
 
 function filePathFromDiff(diff: string, index: number): string {
@@ -65,85 +83,120 @@ function filePathFromDiff(diff: string, index: number): string {
     diff.match(/^--- a\/(.+)$/m)?.[1] ??
     diff.match(/^diff --git a\/(.+) b\//m)?.[1] ??
     `file ${index + 1}`
-  )
+  );
 }
 
 function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
-  const context = usePlugin()
-  const client = () => context.client.rpc(BigCat)
-  const directory = () => context.location?.directory ?? context.data.location.default().directory
-  const [log, setLog] = createSignal<GitLog>(emptyLog)
-  const [loading, setLoading] = createSignal(true)
-  const [error, setError] = createSignal("")
+  const context = usePlugin();
+  const client = () => context.client.rpc(BigCat);
+  const directory = () =>
+    context.location?.directory ?? context.data.location.default().directory;
+  const [log, setLog] = createSignal<GitLog>(emptyLog);
+  const [loading, setLoading] = createSignal(true);
+  const [error, setError] = createSignal("");
 
   const refresh = async () => {
-    setLoading(true)
-    setError("")
+    setLoading(true);
+    setError("");
     try {
-      setLog((await client().log({ directory: directory() })) as GitLog)
+      setLog((await client().log({ directory: directory() })) as GitLog);
     } catch {
-      setError("Could not load Git log. Try refreshing Big Cat.")
+      setError("Could not load Git log. Try refreshing Big Cat.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const inspectCommit = async (commit: GitLog["commits"][number]) => {
     try {
-      const { message } = (await client().details({ directory: directory(), hash: commit.hash })) as CommitDetails
-      const content = message || "This commit has no message."
-      const maxHeight = Math.max(8, context.renderer.height - 12)
-      const messageHeight = Math.min(Math.max(4, content.split(/\r?\n/).length), maxHeight)
+      const { message } = (await client().details({
+        directory: directory(),
+        hash: commit.hash,
+      })) as CommitDetails;
+      const content = message || "This commit has no message.";
+      const maxHeight = Math.max(8, context.renderer.height - 12);
+      const messageHeight = Math.min(
+        Math.max(4, content.split(/\r?\n/).length),
+        maxHeight,
+      );
 
       context.ui.dialog.show(() => (
         <box flexDirection="column" padding={1} gap={1}>
-          <text fg={context.theme.text.base}>{`${commit.hash.slice(0, 7)} ${commit.subject}`}</text>
+          <text
+            fg={context.theme.text.base}
+          >{`${commit.hash.slice(0, 7)} ${commit.subject}`}</text>
           <scrollbox height={messageHeight} scrollY>
             <text fg={context.theme.text.muted}>{content}</text>
           </scrollbox>
           <box flexDirection="row" gap={1}>
-            <text fg={context.theme.primary} onMouseUp={() => void showCommitDiff(commit)}>
+            <text
+              fg={context.theme.primary}
+              onMouseUp={() => void showCommitDiff(commit)}
+            >
               View diff
             </text>
             <text fg={context.theme.text.muted}>·</text>
-            <text fg={context.theme.text.muted} onMouseUp={() => context.ui.dialog.clear()}>
+            <text
+              fg={context.theme.text.muted}
+              onMouseUp={() => context.ui.dialog.clear()}
+            >
               Cancel
             </text>
           </box>
         </box>
-      ))
-      context.ui.dialog.set({ size: "large", centered: true })
+      ));
+      context.ui.dialog.set({ size: "large", centered: true });
     } catch {
-      context.ui.toast.show({ message: "Could not load commit details.", variant: "error" })
+      context.ui.toast.show({
+        message: "Could not load commit details.",
+        variant: "error",
+      });
     }
-  }
+  };
 
   const showCommitDiff = async (commit: GitLog["commits"][number]) => {
-    context.ui.dialog.clear()
+    context.ui.dialog.clear();
     try {
-      const { diff } = (await client().diff({ directory: directory(), hash: commit.hash })) as CommitDiff
+      const { diff } = (await client().diff({
+        directory: directory(),
+        hash: commit.hash,
+      })) as CommitDiff;
       if (!diff) {
-        await context.ui.dialog.alert({ title: `${commit.hash.slice(0, 7)} diff`, message: "This commit has no file changes." })
-        return
+        await context.ui.dialog.alert({
+          title: `${commit.hash.slice(0, 7)} diff`,
+          message: "This commit has no file changes.",
+        });
+        return;
       }
 
-      props.openDiff({ commit, files: splitFileDiffs(diff) })
+      props.openDiff({ commit, files: splitFileDiffs(diff) });
     } catch {
-      context.ui.toast.show({ message: "Could not load the commit diff.", variant: "error" })
+      context.ui.toast.show({
+        message: "Could not load the commit diff.",
+        variant: "error",
+      });
     }
-  }
+  };
 
   onMount(() => {
-    void refresh()
-    const timer = setInterval(() => void refresh(), 15_000)
-    onCleanup(() => clearInterval(timer))
-  })
+    void refresh();
+    const timer = setInterval(() => void refresh(), 15_000);
+    onCleanup(() => clearInterval(timer));
+  });
 
   return (
-    <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingTop={1} gap={1}>
+    <box
+      flexDirection="column"
+      paddingLeft={1}
+      paddingRight={1}
+      paddingTop={1}
+      gap={1}
+    >
       <box flexDirection="row" gap={1}>
         <text fg={context.theme.text.base}>Big Cat</text>
-        <text fg={context.theme.text.muted}>{loading() ? "stretching…" : "Git log"}</text>
+        <text fg={context.theme.text.muted}>
+          {loading() ? "stretching…" : "Git log"}
+        </text>
       </box>
 
       <Show when={log().branch}>
@@ -160,36 +213,54 @@ function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
 
       <For each={log().commits}>
         {(commit) => (
-          <box flexDirection="column" marginBottom={1} onMouseUp={() => void inspectCommit(commit)}>
+          <box
+            flexDirection="column"
+            marginBottom={1}
+            onMouseUp={() => void inspectCommit(commit)}
+          >
             <box flexDirection="row" gap={1}>
               <text fg={context.theme.primary}>{commit.hash.slice(0, 7)}</text>
-              <text fg={context.theme.text.muted}>{relativeDate(commit.date)}</text>
+              <text fg={context.theme.text.muted}>
+                {relativeDate(commit.date)}
+              </text>
             </box>
-            <text fg={context.theme.text.base}>{shorten(commit.subject, 46)}</text>
-            <text fg={context.theme.text.muted}>{shorten(commit.author, 32)}</text>
+            <text fg={context.theme.text.base}>
+              {shorten(commit.subject, 46)}
+            </text>
+            <text fg={context.theme.text.muted}>
+              {shorten(commit.author, 32)}
+            </text>
           </box>
         )}
       </For>
 
-      <Show when={!loading() && !error() && !log().message && log().commits.length === 0}>
+      <Show
+        when={
+          !loading() && !error() && !log().message && log().commits.length === 0
+        }
+      >
         <text fg={context.theme.text.muted}>No commits yet.</text>
       </Show>
     </box>
-  )
+  );
 }
 
-function GitDiffPanel(props: { panel: PanelInput; diff: DiffPanel | undefined }) {
-  const context = usePlugin()
-  const panel = props.diff
-  const [activeFile, setActiveFile] = createSignal(0)
-  const fileDiff = createMemo(() => panel?.files[activeFile()] ?? "")
-  const fileCount = () => panel?.files.length ?? 0
-  const previousFile = () => setActiveFile((index) => Math.max(0, index - 1))
-  const nextFile = () => setActiveFile((index) => Math.min(fileCount() - 1, index + 1))
+function GitDiffPanel(props: {
+  panel: PanelInput;
+  diff: DiffPanel | undefined;
+}) {
+  const context = usePlugin();
+  const panel = props.diff;
+  const [activeFile, setActiveFile] = createSignal(0);
+  const fileDiff = createMemo(() => panel?.files[activeFile()] ?? "");
+  const fileCount = () => panel?.files.length ?? 0;
+  const previousFile = () => setActiveFile((index) => Math.max(0, index - 1));
+  const nextFile = () =>
+    setActiveFile((index) => Math.min(fileCount() - 1, index + 1));
   createEffect(() => {
-    props.diff?.commit.hash
-    setActiveFile(0)
-  })
+    props.diff?.commit.hash;
+    setActiveFile(0);
+  });
   context.keymap.layer(() => ({
     commands: [
       {
@@ -211,9 +282,9 @@ function GitDiffPanel(props: { panel: PanelInput; diff: DiffPanel | undefined })
         run: nextFile,
       },
     ],
-  }))
+  }));
   const syntaxStyle = createMemo(() => {
-    const theme = context.theme
+    const theme = context.theme;
     const style = SyntaxStyle.fromStyles(
       {
         default: { fg: theme.text.base },
@@ -239,7 +310,11 @@ function GitDiffPanel(props: { panel: PanelInput; diff: DiffPanel | undefined })
         "punctuation.delimiter": { fg: theme.syntax.operator },
         "punctuation.special": { fg: theme.syntax.operator },
         "markup.heading": { fg: theme.markdown.heading, bold: true },
-        "markup.heading.1": { fg: theme.markdown.heading, bold: true, underline: true },
+        "markup.heading.1": {
+          fg: theme.markdown.heading,
+          bold: true,
+          underline: true,
+        },
         "markup.heading.2": { fg: theme.markdown.heading, bold: true },
         "markup.heading.3": { fg: theme.markdown.heading, bold: true },
         "markup.heading.4": { fg: theme.markdown.heading, bold: true },
@@ -258,30 +333,49 @@ function GitDiffPanel(props: { panel: PanelInput; diff: DiffPanel | undefined })
         label: { fg: theme.markdown.linkText },
       },
       context.renderer.nativeScene,
-    )
-    onCleanup(() => style.destroy())
-    return style
-  })
+    );
+    onCleanup(() => style.destroy());
+    return style;
+  });
 
-  if (!panel) return <box />
+  if (!panel) return <box />;
 
-  const hasAddedLines = createMemo(() => /^\+(?!\+\+)/m.test(fileDiff()))
-  const hasRemovedLines = createMemo(() => /^-(?!---)/m.test(fileDiff()))
-  const diffView = createMemo(() => context.renderer.width >= 120 && hasAddedLines() && hasRemovedLines() ? "split" : "unified")
-  const theme = context.theme
+  const hasAddedLines = createMemo(() => /^\+(?!\+\+)/m.test(fileDiff()));
+  const hasRemovedLines = createMemo(() => /^-(?!---)/m.test(fileDiff()));
+  const diffView = createMemo(() =>
+    context.renderer.width >= 120 && hasAddedLines() && hasRemovedLines()
+      ? "split"
+      : "unified",
+  );
+  const theme = context.theme;
 
   return (
-    <box flexDirection="column" height="100%" minHeight={0} overflow="hidden" padding={1} gap={1}>
+    <box
+      flexDirection="column"
+      height="100%"
+      minHeight={0}
+      overflow="hidden"
+      padding={1}
+      gap={1}
+    >
       <box flexDirection="row" flexShrink={0} justifyContent="space-between">
-        <text fg={theme.text.base}>{`${panel.commit.hash.slice(0, 7)} diff (${fileCount()} files)`}</text>
+        <text
+          fg={theme.text.base}
+        >{`${panel.commit.hash.slice(0, 7)} diff (${fileCount()} files)`}</text>
         <text fg={theme.text.muted} onMouseUp={props.panel.close}>
           Close
         </text>
       </box>
       <box flexDirection="row" flexShrink={0} gap={1}>
-        <text fg={theme.text.muted} onMouseUp={previousFile}>← Prev</text>
-        <text fg={theme.text.base}>{`${activeFile() + 1}/${fileCount()} ${filePathFromDiff(fileDiff(), activeFile())}`}</text>
-        <text fg={theme.text.muted} onMouseUp={nextFile}>Next →</text>
+        <text fg={theme.text.muted} onMouseUp={previousFile}>
+          ← Prev
+        </text>
+        <text
+          fg={theme.text.base}
+        >{`${activeFile() + 1}/${fileCount()} ${filePathFromDiff(fileDiff(), activeFile())}`}</text>
+        <text fg={theme.text.muted} onMouseUp={nextFile}>
+          Next →
+        </text>
       </box>
       <diff
         diff={fileDiff()}
@@ -305,31 +399,37 @@ function GitDiffPanel(props: { panel: PanelInput; diff: DiffPanel | undefined })
         showLineNumbers
       />
     </box>
-  )
+  );
 }
 
 export default Plugin.define({
   id: "big-cat.tui",
   setup(context) {
-    const [diff, setDiff] = createSignal<DiffPanel | undefined>()
+    const [diff, setDiff] = createSignal<DiffPanel | undefined>();
     const sidebar = context.ui.slot({
       prepend: "sidebar.content",
       render: () => (
         <GitLogSidebar
           openDiff={(next) => {
-            setDiff(next)
-            context.ui.panel.open("big-cat.diff", { presentation: "fullscreen" })
+            setDiff(next);
+            context.ui.panel.open("big-cat.diff", {
+              presentation: "fullscreen",
+            });
           }}
         />
       ),
-    })
+    });
     const panel = context.ui.slot({
       append: "session.panel",
-      render: (input) => <Show when={input.name === "big-cat.diff"}><GitDiffPanel panel={input} diff={diff()} /></Show>,
-    })
+      render: (input) => (
+        <Show when={input.name === "big-cat.diff"}>
+          <GitDiffPanel panel={input} diff={diff()} />
+        </Show>
+      ),
+    });
     return () => {
-      sidebar()
-      panel()
-    }
+      sidebar();
+      panel();
+    };
   },
-})
+});
