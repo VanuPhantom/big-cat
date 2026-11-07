@@ -85,7 +85,7 @@ async function readLog(
       repository: "",
       branch: "",
       commits: [],
-      message: "No Git repository found for this OpenCode location.",
+      message: "No GIT repository found for this OpenCode location.",
     };
   }
 }

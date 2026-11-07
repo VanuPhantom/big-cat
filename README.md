@@ -2,11 +2,11 @@
 
 > Ooooo, biiiiggg stretch!
 
-Adds a Git log view to your OpenCode 2.0 installation.
+Adds a GIT log view to your OpenCode 2.0 installation.
 
 ---
 
-_Big Cat_ adds a Git log to the top of your OpenCode TUI's right-hand sidebar.
+_Big Cat_ adds a GIT log to the top of your OpenCode TUI's right-hand sidebar.
 It shows the current branch, recent commits, authors, and relative commit
 dates, and refreshes automatically every 15 seconds.
 
@@ -42,7 +42,7 @@ session and Big Cat will appear in the sidebar.
 ## Usage
 
 - Big Cat reads the repository associated with the active OpenCode location;
-  it never changes Git state.
+  it never changes GIT state.
 - Click a commit to read its complete commit message. Choose **View diff** to
   open its patch in a fullscreen panel, or **Cancel** to return to the log.
 - The diff panel shows one file at a time. Use **Prev** and **Next**, or the
@@ -72,6 +72,6 @@ npm install
 npm run check
 ```
 
-Big Cat requires Git to be installed. Outside a Git repository, it displays a
-friendly empty-state message instead of running any Git commands that mutate
+Big Cat requires GIT to be installed. Outside a GIT repository, it displays a
+friendly empty-state message instead of running any GIT commands that mutate
 the working tree.

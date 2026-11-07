@@ -101,7 +101,7 @@ function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
     try {
       setLog((await client().log({ directory: directory() })) as GitLog);
     } catch {
-      setError("Could not load Git log. Try refreshing Big Cat.");
+      setError("Could not load GIT log. Try refreshing Big Cat.");
     } finally {
       setLoading(false);
     }
@@ -195,7 +195,7 @@ function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
       <box flexDirection="row" gap={1}>
         <text fg={context.theme.text.base}>Big Cat</text>
         <text fg={context.theme.text.muted}>
-          {loading() ? "stretching…" : "Git log"}
+          {loading() ? "stretching…" : "GIT log"}
         </text>
       </box>
 
@@ -265,19 +265,19 @@ function GitDiffPanel(props: {
     commands: [
       {
         id: "big-cat.diff.close",
-        title: "Close Git diff",
+        title: "Close GIT diff",
         bind: "escape,q",
         run: props.panel.close,
       },
       {
         id: "big-cat.diff.previous-file",
-        title: "Previous Git diff file",
+        title: "Previous GIT diff file",
         bind: "p,left",
         run: previousFile,
       },
       {
         id: "big-cat.diff.next-file",
-        title: "Next Git diff file",
+        title: "Next GIT diff file",
         bind: "n,right",
         run: nextFile,
       },

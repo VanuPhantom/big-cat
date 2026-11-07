@@ -1,7 +1,7 @@
 {
   "name": "big-cat",
   "version": "0.1.0",
-  "description": "A Git log sidebar for the OpenCode 2 TUI.",
+  "description": "A GIT log sidebar for the OpenCode 2 TUI.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
