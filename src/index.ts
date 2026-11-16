@@ -25,6 +25,7 @@ async function git(
   directory: string,
   args: string[],
   signal: AbortSignal,
+  { trim = true }: { trim?: boolean } = {},
 ): Promise<string> {
   const { stdout } = await execFileAsync("git", args, {
     cwd: directory,
@@ -32,7 +33,7 @@ async function git(
     maxBuffer: 10 * 1024 * 1024,
     signal,
   });
-  return stdout.trim();
+  return trim ? stdout.trim() : stdout;
 }
 
 function parseCommits(output: string): Commit[] {
@@ -132,6 +133,8 @@ export default Plugin.define({
             directory || context.location.directory,
             ["show", "--format=", "--no-ext-diff", hash, "--"],
             request.signal,
+            // Diffs can end in a significant " " context line.
+            { trim: false },
           ),
         };
       },
