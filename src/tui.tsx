@@ -7,6 +7,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
   onMount,
 } from "solid-js";
@@ -237,16 +238,45 @@ function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal("");
 
-  const refresh = async () => {
+  let refreshing = false;
+  let refreshQueued = false;
+  let disposed = false;
+  const refresh = () => {
+    refreshQueued = true;
+    if (refreshing || disposed) return;
+    refreshing = true;
     setLoading(true);
-    setError("");
-    try {
-      setLog((await client().log({ directory: directory() })) as GitLog);
-    } catch {
-      setError("Could not load GIT log. Try refreshing Big Cat.");
-    } finally {
-      setLoading(false);
-    }
+    void (async () => {
+      while (refreshQueued && !disposed) {
+        refreshQueued = false;
+        const requestedDirectory = directory();
+        setError("");
+        try {
+          const next = (await client().log({
+            directory: requestedDirectory,
+          })) as GitLog;
+          if (requestedDirectory !== directory()) {
+            refreshQueued = true;
+          } else if (!disposed) {
+            setLog(next);
+          }
+        } catch {
+          if (requestedDirectory !== directory()) {
+            refreshQueued = true;
+          } else if (!disposed) {
+            setError("Could not load GIT log. Try refreshing Big Cat.");
+          }
+        }
+      }
+      refreshing = false;
+      if (!disposed) setLoading(false);
+    })();
+  };
+
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleRefresh = () => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => void refresh(), 250);
   };
 
   const inspectCommit = async (commit: GitLog["commits"][number]) => {
@@ -350,10 +380,31 @@ function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
   };
 
   onMount(() => {
-    void refresh();
-    const timer = setInterval(() => void refresh(), 15_000);
-    onCleanup(() => clearInterval(timer));
+    // Commits, checkouts, staging, etc., reported by the server's .git watcher.
+    const offGitChange = client().events.on("changed", (event) => {
+      if (event.data.directory === directory()) scheduleRefresh();
+    });
+    // Working tree edits, which can change the unstaged changes indicator.
+    const offFileChange = context.data.on("filesystem.changed", (event) => {
+      if (event.location && event.location.directory !== directory()) return;
+      // An initially empty/non-repository directory may become a repository.
+      if (log().repository && event.data.file.split(/[\\/]/).includes(".git")) {
+        return;
+      }
+      scheduleRefresh();
+    });
+    // Subscriptions must be live before the first log request installs a watcher.
+    refresh();
+    onCleanup(() => {
+      disposed = true;
+      clearTimeout(refreshTimer);
+      offGitChange();
+      offFileChange();
+    });
   });
+
+  // Follow the session to another directory.
+  createEffect(on(directory, refresh, { defer: true }));
 
   return (
     <box

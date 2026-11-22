@@ -8,7 +8,10 @@ Adds a GIT log view to your OpenCode 2.0 installation.
 
 _Big Cat_ adds a GIT log to the top of your OpenCode TUI's right-hand sidebar.
 It shows the current branch, recent commits, authors, and relative commit
-dates, and refreshes automatically every 15 seconds.
+dates. It refreshes as soon as something changes: the plugin watches the
+repository's GIT metadata (`HEAD`, the index, and branch refs) to catch
+commits, checkouts, staging, resets, and rebases, and listens to OpenCode's
+file change events to keep the unstaged changes indicator up to date.
 
 ## Install
 
