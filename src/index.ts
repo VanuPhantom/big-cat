@@ -245,16 +245,48 @@ export default Plugin.define({
     const maxCommits = Math.max(1, Math.min(limit, 100));
 
     const watchers = new Map<string, Promise<RepositoryWatcher | undefined>>();
+    const retries = new Map<string, ReturnType<typeof setTimeout>>();
+    const retryDelays = new Map<string, number>();
+    let stopped = false;
     let emitChanged: (directory: string) => void = () => {};
 
+    const clearRetry = (directory: string) => {
+      clearTimeout(retries.get(directory));
+      retries.delete(directory);
+    };
+
+    const scheduleRetry = (directory: string) => {
+      if (stopped || retries.has(directory)) return;
+      const delay = retryDelays.get(directory) ?? 1_000;
+      retryDelays.set(directory, Math.min(delay * 2, 30_000));
+      retries.set(
+        directory,
+        setTimeout(() => {
+          retries.delete(directory);
+          if (stopped) return;
+          const signal = AbortSignal.timeout(10_000);
+          void git(directory, ["rev-parse", "--show-toplevel"], signal)
+            .catch(() => "")
+            .then((repository) => ensureWatcher(directory, repository))
+            .then((watcher) => {
+              if (watcher && !stopped) emitChanged(directory);
+            })
+            .catch(() => scheduleRetry(directory));
+        }, delay),
+      );
+    };
+
     const ensureWatcher = async (directory: string, repository: string) => {
+      if (stopped) return;
       const existing = watchers.get(directory);
       if (existing) {
         const watcher = await existing;
+        if (stopped) return;
         if (watchers.get(directory) !== existing) {
           return ensureWatcher(directory, repository);
         }
         if (watcher?.kind === (repository ? "repository" : "directory")) {
+          clearRetry(directory);
           return watcher;
         }
         // Switch between repository and directory watchers as Git appears/disappears.
@@ -264,16 +296,22 @@ export default Plugin.define({
       const pending = watchRepository(
         directory,
         repository,
-        () => emitChanged(directory),
         () => {
-          // A future log request can retry without a persistent watcher
-          // failure triggering an endless refresh/re-register cycle.
-          if (watchers.get(directory) === pending) watchers.delete(directory);
+          retryDelays.delete(directory);
+          emitChanged(directory);
+        },
+        () => {
+          if (watchers.get(directory) !== pending) return;
+          watchers.delete(directory);
+          scheduleRetry(directory);
         },
       ).then((watcher) => {
-        // Retry on the next log request if the watcher could not be installed.
-        if (!watcher && watchers.get(directory) === pending) {
-          watchers.delete(directory);
+        if (watchers.get(directory) === pending) {
+          if (watcher) clearRetry(directory);
+          else {
+            watchers.delete(directory);
+            scheduleRetry(directory);
+          }
         }
         return watcher;
       });
@@ -339,7 +377,11 @@ export default Plugin.define({
     };
 
     return async () => {
+      stopped = true;
       emitChanged = () => {};
+      for (const timer of retries.values()) clearTimeout(timer);
+      retries.clear();
+      retryDelays.clear();
       const pending = [...watchers.values()];
       watchers.clear();
       for (const watcher of await Promise.all(pending)) watcher?.close();

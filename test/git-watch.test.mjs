@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -107,6 +113,36 @@ test("git init replaces the directory watcher with a repository watcher", async 
       git(directory, "add", "first.txt"),
     );
     assert.equal((await app.log()).hasStagedChanges, true);
+  } finally {
+    await app?.stop();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a failed metadata watch retries after the missing refs directory returns", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "big-cat-retry-"));
+  let app;
+  try {
+    git(directory, "init", "-q");
+    git(directory, "config", "user.email", "test@example.com");
+    git(directory, "config", "user.name", "Test");
+    writeFileSync(join(directory, "first.txt"), "hello");
+    git(directory, "add", "first.txt");
+    git(directory, "commit", "-qm", "first");
+
+    const heads = join(directory, ".git", "refs", "heads");
+    const hidden = join(directory, ".git", "refs", "heads-hidden");
+    renameSync(heads, hidden);
+    app = await start(directory);
+    await app.log();
+
+    await app.changed("metadata watcher retry", () =>
+      renameSync(hidden, heads),
+    );
+    await app.changed("edit after watcher recovery", () =>
+      writeFileSync(join(directory, "first.txt"), "edited"),
+    );
+    assert.equal((await app.log()).hasUnstagedChanges, true);
   } finally {
     await app?.stop();
     rmSync(directory, { recursive: true, force: true });
