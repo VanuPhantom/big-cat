@@ -77,6 +77,11 @@ test("unborn repository: first commit and staged changes update the sidebar", as
     assert.equal(result.commits[0].subject, "first");
     assert.equal(result.hasStagedChanges, false);
 
+    await app.changed("edit outside OpenCode", () =>
+      writeFileSync(join(directory, "first.txt"), "edited externally"),
+    );
+    assert.equal((await app.log()).hasUnstagedChanges, true);
+
     await app.changed("git checkout", () =>
       git(directory, "checkout", "-qb", "feature/nested"),
     );

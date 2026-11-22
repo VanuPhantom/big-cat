@@ -131,6 +131,7 @@ type RepositoryWatcher = {
 
 async function watchRepository(
   directory: string,
+  repository: string,
   onChange: () => void,
   onFailure: () => void,
 ): Promise<RepositoryWatcher | undefined> {
@@ -182,32 +183,55 @@ async function watchRepository(
     path: string,
     recursive: boolean,
     filter: (file: string) => boolean,
-  ) => {
+    optional = false,
+  ): boolean => {
     try {
       const watcher = watch(path, { recursive }, (_event, file) => {
         if (!file || filter(file.toString())) notify();
       });
       watcher.on("error", () => {
         if (closed) return;
+        if (optional) {
+          watcher.close();
+          return;
+        }
         close();
         onFailure();
       });
       watchers.push(watcher);
+      return true;
     } catch {
-      // The path may not exist yet, for example in a fresh repository.
+      return false;
     }
   };
 
   // Watch directories rather than files: GIT replaces files by renaming
   // lock files over them, which detaches file-level watchers.
-  add(gitDir, false, (file) => watchedGitDirFiles.has(file));
-  if (commonDir !== gitDir) {
-    add(commonDir, false, (file) => file === "packed-refs");
+  const metadata = [
+    add(gitDir, false, (file) => watchedGitDirFiles.has(file)),
+    commonDir === gitDir ||
+      add(commonDir, false, (file) => file === "packed-refs"),
+    add(
+      join(commonDir, "refs", "heads"),
+      true,
+      (file) => !file.endsWith(".lock"),
+    ),
+  ];
+  if (metadata.includes(false)) {
+    close();
+    return;
   }
-  add(join(commonDir, "refs", "heads"), true, (file) => !file.endsWith(".lock"));
 
-  // A watcher that could not be installed cannot keep the sidebar current.
-  return watchers.length > 0 ? { kind: "repository", close } : undefined;
+  // OpenCode's filesystem events are not guaranteed for edits made outside
+  // OpenCode (for example by an editor or a shell in another process).
+  add(
+    repository,
+    true,
+    (file) => !file.split(/[\\/]/).includes(".git"),
+    true,
+  );
+
+  return { kind: "repository", close };
 }
 
 export default Plugin.define({
@@ -223,7 +247,7 @@ export default Plugin.define({
     const watchers = new Map<string, Promise<RepositoryWatcher | undefined>>();
     let emitChanged: (directory: string) => void = () => {};
 
-    const ensureWatcher = async (directory: string, repository: boolean) => {
+    const ensureWatcher = async (directory: string, repository: string) => {
       const existing = watchers.get(directory);
       if (existing) {
         const watcher = await existing;
@@ -239,6 +263,7 @@ export default Plugin.define({
       }
       const pending = watchRepository(
         directory,
+        repository,
         () => emitChanged(directory),
         () => {
           // A future log request can retry without a persistent watcher
@@ -261,7 +286,7 @@ export default Plugin.define({
         const { directory: requested } = input as { directory: string };
         const directory = requested || context.location.directory;
         const log = await readLog(directory, maxCommits, request.signal);
-        await ensureWatcher(directory, Boolean(log.repository));
+        await ensureWatcher(directory, log.repository);
         return log;
       },
       details: async (input, request) => {
