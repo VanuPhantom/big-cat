@@ -14,7 +14,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "tsc --noEmit false --outDir .big-cat-test && node --test test/*.test.mjs"
   },
   "keywords": [
     "opencode",
