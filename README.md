@@ -12,10 +12,11 @@ dates, and refreshes automatically every 15 seconds.
 
 ## Install
 
-Install the plugin from npm once published:
+_Big Cat_ has not yet been published on NPM.
+If you'd like to try it, you can install it from GIT directly:
 
 ```sh
-npm install big-cat
+npm install git+https://github.com/VanuPhantom/big-cat
 ```
 
 Then add it to your project's `opencode.jsonc`:
@@ -36,13 +37,12 @@ For local development, reference this directory instead:
 }
 ```
 
-OpenCode reloads plugin configuration automatically. Start or return to a
-session and Big Cat will appear in the sidebar.
+OpenCode reloads the plugin configuration automatically.
+Start or return to a session and Big Cat will appear in the sidebar.
 
 ## Usage
 
-- Big Cat reads the repository associated with the active OpenCode location;
-  it never changes GIT state.
+- Big Cat uses the GIT state that is visible in the current session's working directory.
 - Click a commit to read its complete commit message. Choose **View diff** to
   open its patch in a fullscreen panel, or **Cancel** to return to the log.
 - The diff panel shows one file at a time. Use **Prev** and **Next**, or the
