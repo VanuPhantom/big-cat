@@ -81,6 +81,109 @@ function splitFileDiffs(diff: string): string[] {
   return files.length > 0 ? files : [diff];
 }
 
+type HunkRange = {
+  oldStart: number;
+  oldCount: number;
+  newStart: number;
+  newCount: number;
+};
+
+function hunkRange(header: string): HunkRange | undefined {
+  const match = header.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+  if (!match) return;
+
+  return {
+    oldStart: Number(match[1]),
+    oldCount: Number(match[2] ?? 1),
+    newStart: Number(match[3]),
+    newCount: Number(match[4] ?? 1),
+  };
+}
+
+type DiffHunk = {
+  diff: string;
+  height: number;
+  separator?: string;
+};
+
+function hunkHeight(hunk: string, view: "unified" | "split"): number {
+  const lines = hunk.split(/\r?\n/).slice(1);
+  if (view === "unified") {
+    return Math.max(1, lines.filter((line) => /^[ +\-]/.test(line)).length);
+  }
+
+  let rows = 0;
+  for (let index = 0; index < lines.length;) {
+    const kind = lines[index]?.[0];
+    if (kind === undefined) {
+      index++;
+      continue;
+    }
+    if (kind === " ") {
+      rows++;
+      index++;
+      continue;
+    }
+    if (kind === "\\") {
+      index++;
+      continue;
+    }
+
+    let additions = 0;
+    let removals = 0;
+    while (index < lines.length) {
+      const change = lines[index]?.[0];
+      if (change === "+") additions++;
+      else if (change === "-") removals++;
+      else break;
+      index++;
+    }
+    rows += Math.max(additions, removals);
+  }
+  return Math.max(1, rows);
+}
+
+function splitDiffHunks(diff: string, view: "unified" | "split"): DiffHunk[] {
+  const parts = diff.split(/(?=^@@ )/m);
+  const header = parts.shift() ?? "";
+  let previous: HunkRange | undefined;
+
+  const hunks = parts.flatMap((part) => {
+    const current = hunkRange(part);
+    if (!current) return [];
+    const entry: DiffHunk = {
+      diff: `${header}${part}`,
+      height: hunkHeight(part, view),
+    };
+    if (!previous) {
+      previous = current;
+      return [entry];
+    }
+
+    const unchangedOld = Math.max(
+      0,
+      current.oldStart - (previous.oldStart + previous.oldCount),
+    );
+    const unchangedNew = Math.max(
+      0,
+      current.newStart - (previous.newStart + previous.newCount),
+    );
+    previous = current;
+
+    if (unchangedOld === 0 && unchangedNew === 0) return [entry];
+
+    const unchanged =
+      unchangedOld === unchangedNew
+        ? `${unchangedNew} unchanged lines`
+        : `${unchangedOld}/${unchangedNew} unchanged lines`;
+    return [{ ...entry, separator: `──── ${unchanged} omitted ────` }];
+  });
+
+  return hunks.length > 0
+    ? hunks
+    : [{ diff, height: Math.max(1, diff.split(/\r?\n/).length) }];
+}
+
 enum ChangeKinds {
   Addition,
   Removal,
@@ -446,6 +549,7 @@ function GitDiffPanel(props: {
       ? "split"
       : "unified",
   );
+  const fileHunks = createMemo(() => splitDiffHunks(fileDiff(), diffView()));
   const theme = context.theme;
 
   return (
@@ -476,27 +580,40 @@ function GitDiffPanel(props: {
           Next →
         </text>
       </box>
-      <diff
-        diff={fileDiff()}
-        flexGrow={1}
-        flexShrink={1}
-        minHeight={0}
-        view={diffView()}
-        wrapMode="none"
-        filetype={filetypeFromDiff(fileDiff())}
-        syntaxStyle={syntaxStyle()}
-        fg={theme.text.base}
-        addedBg={theme.diff.background.added}
-        removedBg={theme.diff.background.removed}
-        contextBg={theme.diff.background.context}
-        addedSignColor={theme.diff.text.added}
-        removedSignColor={theme.diff.text.removed}
-        lineNumberFg={theme.diff.lineNumber.text}
-        lineNumberBg={theme.background.base}
-        addedLineNumberBg={theme.diff.lineNumber.background.added}
-        removedLineNumberBg={theme.diff.lineNumber.background.removed}
-        showLineNumbers
-      />
+      <scrollbox flexGrow={1} flexShrink={1} minHeight={0} scrollY>
+        <box flexDirection="column" width="100%">
+          <For each={fileHunks()}>
+            {(hunk) => (
+              <box flexDirection="column" flexShrink={0}>
+                <Show when={hunk.separator}>
+                  <text fg={theme.text.muted}>{hunk.separator}</text>
+                </Show>
+                <diff
+                  diff={hunk.diff}
+                  height={hunk.height}
+                  width="100%"
+                  flexShrink={0}
+                  view={diffView()}
+                  wrapMode="none"
+                  filetype={filetypeFromDiff(fileDiff())}
+                  syntaxStyle={syntaxStyle()}
+                  fg={theme.text.base}
+                  addedBg={theme.diff.background.added}
+                  removedBg={theme.diff.background.removed}
+                  contextBg={theme.diff.background.context}
+                  addedSignColor={theme.diff.text.added}
+                  removedSignColor={theme.diff.text.removed}
+                  lineNumberFg={theme.diff.lineNumber.text}
+                  lineNumberBg={theme.background.base}
+                  addedLineNumberBg={theme.diff.lineNumber.background.added}
+                  removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                  showLineNumbers
+                />
+              </box>
+            )}
+          </For>
+        </box>
+      </scrollbox>
     </box>
   );
 }
