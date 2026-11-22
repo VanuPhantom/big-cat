@@ -21,17 +21,21 @@ type GitLog = {
     date: string;
     subject: string;
   }>;
+  hasStagedChanges: boolean;
+  hasUnstagedChanges: boolean;
   message: string;
 };
 
 type CommitDetails = { message: string };
 type CommitDiff = { diff: string };
-type DiffPanel = { commit: GitLog["commits"][number]; files: string[] };
+type DiffPanel = { title: string; files: string[] };
 
 const emptyLog: GitLog = {
   repository: "",
   branch: "",
   commits: [],
+  hasStagedChanges: false,
+  hasUnstagedChanges: false,
   message: "",
 };
 
@@ -204,10 +208,39 @@ function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
         return;
       }
 
-      props.openDiff({ commit, files: splitFileDiffs(diff) });
+      props.openDiff({
+        title: `${commit.hash.slice(0, 7)} diff`,
+        files: splitFileDiffs(diff),
+      });
     } catch {
       context.ui.toast.show({
         message: "Could not load the commit diff.",
+        variant: "error",
+      });
+    }
+  };
+
+  const showWorkingDiff = async (staged: boolean) => {
+    const title = staged ? "Staged changes" : "Unstaged changes";
+    try {
+      const { diff } = (await client().workingDiff({
+        directory: directory(),
+        staged,
+      })) as CommitDiff;
+      if (!diff) {
+        await context.ui.dialog.alert({
+          title,
+          message: staged
+            ? "There are no staged file changes."
+            : "There are no unstaged file changes.",
+        });
+        return;
+      }
+
+      props.openDiff({ title, files: splitFileDiffs(diff) });
+    } catch {
+      context.ui.toast.show({
+        message: `Could not load ${title}.`,
         variant: "error",
       });
     }
@@ -237,6 +270,38 @@ function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
       <Show when={log().branch}>
         <text fg={context.theme.text.muted}>{shorten(log().branch, 34)}</text>
       </Show>
+
+      <box flexDirection="row" gap={1}>
+        <text
+          fg={
+            log().hasUnstagedChanges
+              ? context.theme.primary
+              : context.theme.text.muted
+          }
+          onMouseUp={
+            log().hasUnstagedChanges
+              ? () => void showWorkingDiff(false)
+              : undefined
+          }
+        >
+          Unstaged changes
+        </text>
+        <text fg={context.theme.text.muted}>·</text>
+        <text
+          fg={
+            log().hasStagedChanges
+              ? context.theme.primary
+              : context.theme.text.muted
+          }
+          onMouseUp={
+            log().hasStagedChanges
+              ? () => void showWorkingDiff(true)
+              : undefined
+          }
+        >
+          Staged changes
+        </text>
+      </box>
 
       <Show when={error() || log().message}>
         <text fg={context.theme.text.muted}>{error() || log().message}</text>
@@ -293,7 +358,7 @@ function GitDiffPanel(props: {
   const nextFile = () =>
     setActiveFile((index) => Math.min(fileCount() - 1, index + 1));
   createEffect(() => {
-    props.diff?.commit.hash;
+    props.diff?.title;
     setActiveFile(0);
   });
   context.keymap.layer(() => ({
@@ -395,7 +460,7 @@ function GitDiffPanel(props: {
       <box flexDirection="row" flexShrink={0} justifyContent="space-between">
         <text
           fg={theme.text.base}
-        >{`${panel.commit.hash.slice(0, 7)} diff (${fileCount()} files)`}</text>
+        >{`${panel.title} (${fileCount()} files)`}</text>
         <text fg={theme.text.muted} onMouseUp={props.panel.close}>
           Close
         </text>

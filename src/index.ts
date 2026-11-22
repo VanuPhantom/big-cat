@@ -18,6 +18,8 @@ type GitLog = {
   repository: string;
   branch: string;
   commits: Commit[];
+  hasStagedChanges: boolean;
+  hasUnstagedChanges: boolean;
   message: string;
 };
 
@@ -60,7 +62,7 @@ async function readLog(
       ["rev-parse", "--show-toplevel"],
       signal,
     );
-    const [branch, output] = await Promise.all([
+    const [branch, output, stagedChanges, unstagedChanges] = await Promise.all([
       git(directory, ["branch", "--show-current"], signal),
       git(
         directory,
@@ -72,12 +74,16 @@ async function readLog(
         ],
         signal,
       ),
+      git(directory, ["diff", "--name-only", "--staged"], signal),
+      git(directory, ["diff", "--name-only"], signal),
     ]);
 
     return {
       repository,
       branch: branch || "detached HEAD",
       commits: parseCommits(output),
+      hasStagedChanges: Boolean(stagedChanges),
+      hasUnstagedChanges: Boolean(unstagedChanges),
       message: "",
     };
   } catch (error) {
@@ -86,6 +92,8 @@ async function readLog(
       repository: "",
       branch: "",
       commits: [],
+      hasStagedChanges: false,
+      hasUnstagedChanges: false,
       message: "No GIT repository found for this OpenCode location.",
     };
   }
@@ -132,6 +140,21 @@ export default Plugin.define({
           diff: await git(
             directory || context.location.directory,
             ["show", "--format=", "--no-ext-diff", hash, "--"],
+            request.signal,
+            // Diffs can end in a significant " " context line.
+            { trim: false },
+          ),
+        };
+      },
+      workingDiff: async (input, request) => {
+        const { directory, staged } = input as {
+          directory: string;
+          staged: boolean;
+        };
+        return {
+          diff: await git(
+            directory || context.location.directory,
+            ["diff", "--no-ext-diff", ...(staged ? ["--staged"] : []), "--"],
             request.signal,
             // Diffs can end in a significant " " context line.
             { trim: false },
