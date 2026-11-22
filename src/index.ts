@@ -151,25 +151,37 @@ async function watchRepository(
   } catch {
     // A directory can become a repository when `git init` creates .git.
     try {
+      let closed = false;
       const watcher = watch(directory, (_event, file) => {
-        if (!file || file.toString() === ".git") onChange();
+        if (!closed && (!file || file.toString() === ".git")) onChange();
       });
       watcher.on("error", () => {
+        if (closed) return;
+        closed = true;
         watcher.close();
         onFailure();
       });
-      return { kind: "directory", close: () => watcher.close() };
+      return {
+        kind: "directory",
+        close: () => {
+          closed = true;
+          watcher.close();
+        },
+      };
     } catch {
       return;
     }
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let workingRetry: ReturnType<typeof setTimeout> | undefined;
+  let workingRetryDelay = 1_000;
   let closed = false;
   const watchers: FSWatcher[] = [];
   const close = () => {
     closed = true;
     clearTimeout(timer);
+    clearTimeout(workingRetry);
     for (const watcher of watchers) watcher.close();
   };
   const notify = () => {
@@ -183,7 +195,6 @@ async function watchRepository(
     path: string,
     recursive: boolean,
     filter: (file: string) => boolean,
-    optional = false,
   ): boolean => {
     try {
       const watcher = watch(path, { recursive }, (_event, file) => {
@@ -191,10 +202,6 @@ async function watchRepository(
       });
       watcher.on("error", () => {
         if (closed) return;
-        if (optional) {
-          watcher.close();
-          return;
-        }
         close();
         onFailure();
       });
@@ -204,6 +211,38 @@ async function watchRepository(
       return false;
     }
   };
+
+  function scheduleWorkingRetry() {
+    if (closed || workingRetry) return;
+    workingRetry = setTimeout(() => {
+      workingRetry = undefined;
+      watchWorkingTree();
+    }, workingRetryDelay);
+    workingRetryDelay = Math.min(workingRetryDelay * 2, 30_000);
+  }
+
+  function watchWorkingTree() {
+    if (closed) return;
+    try {
+      const watcher = watch(repository, { recursive: true }, (_event, file) => {
+        if (file && file.toString().split(/[\\/]/).includes(".git")) return;
+        workingRetryDelay = 1_000;
+        notify();
+      });
+      watcher.on("error", () => {
+        if (closed) return;
+        watcher.close();
+        const index = watchers.indexOf(watcher);
+        if (index !== -1) watchers.splice(index, 1);
+        scheduleWorkingRetry();
+      });
+      watchers.push(watcher);
+    } catch {
+      // Keep metadata notifications working even if the worktree is too
+      // large for a recursive watcher or is temporarily unavailable.
+      scheduleWorkingRetry();
+    }
+  }
 
   // Watch directories rather than files: GIT replaces files by renaming
   // lock files over them, which detaches file-level watchers.
@@ -224,12 +263,7 @@ async function watchRepository(
 
   // OpenCode's filesystem events are not guaranteed for edits made outside
   // OpenCode (for example by an editor or a shell in another process).
-  add(
-    repository,
-    true,
-    (file) => !file.split(/[\\/]/).includes(".git"),
-    true,
-  );
+  watchWorkingTree();
 
   return { kind: "repository", close };
 }
