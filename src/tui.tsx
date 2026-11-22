@@ -77,6 +77,41 @@ function splitFileDiffs(diff: string): string[] {
   return files.length > 0 ? files : [diff];
 }
 
+enum ChangeKinds {
+  Addition,
+  Removal,
+  Mixed,
+}
+
+function diffChangeKinds(diff: string): ChangeKinds {
+  let inHunk = false;
+  let kind: ChangeKinds | undefined;
+
+  for (const line of diff.split(/\r?\n/)) {
+    if (line.startsWith("diff --git ")) {
+      inHunk = false;
+      continue;
+    }
+    if (line.startsWith("@@ ")) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk) continue;
+
+    const lineKind = line.startsWith("+")
+      ? ChangeKinds.Addition
+      : line.startsWith("-")
+        ? ChangeKinds.Removal
+        : undefined;
+
+    if (lineKind === undefined) continue;
+    if (kind !== undefined && kind !== lineKind) return ChangeKinds.Mixed;
+    kind = lineKind;
+  }
+
+  return kind ?? ChangeKinds.Addition;
+}
+
 function filePathFromDiff(diff: string, index: number): string {
   return (
     diff.match(/^\+\+\+ b\/(.+)$/m)?.[1] ??
@@ -340,10 +375,9 @@ function GitDiffPanel(props: {
 
   if (!panel) return <box />;
 
-  const hasAddedLines = createMemo(() => /^\+(?!\+\+)/m.test(fileDiff()));
-  const hasRemovedLines = createMemo(() => /^-(?!---)/m.test(fileDiff()));
+  const changeKind = createMemo(() => diffChangeKinds(fileDiff()));
   const diffView = createMemo(() =>
-    context.renderer.width >= 120 && hasAddedLines() && hasRemovedLines()
+    context.renderer.width >= 120 && changeKind() === ChangeKinds.Mixed
       ? "split"
       : "unified",
   );
