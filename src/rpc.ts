@@ -99,5 +99,9 @@ export const BigCat = Rpc.define({
       },
     },
   },
-  events: {},
+  events: {
+    changed: {
+      schema: directoryInput,
+    },
+  },
 } as const);
