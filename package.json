@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./tui": "./src/tui.tsx",
+    "./tui": "./src/tui/index.tsx",
     "./rpc": "./src/rpc.ts"
   },
   "files": [
