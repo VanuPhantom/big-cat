@@ -186,14 +186,15 @@ function splitDiffHunks(diff: string, view: "unified" | "split"): DiffHunk[] {
 }
 
 enum ChangeKinds {
-  Addition,
-  Removal,
-  Mixed,
+  None = 0,
+  Addition = 1,
+  Removal = 2,
+  Mixed = ChangeKinds.Addition | ChangeKinds.Removal,
 }
 
 function diffChangeKinds(diff: string): ChangeKinds {
   let inHunk = false;
-  let kind: ChangeKinds | undefined;
+  let kind: ChangeKinds = ChangeKinds.None;
 
   for (const line of diff.split(/\r?\n/)) {
     if (line.startsWith("diff --git ")) {
@@ -206,18 +207,16 @@ function diffChangeKinds(diff: string): ChangeKinds {
     }
     if (!inHunk) continue;
 
-    const lineKind = line.startsWith("+")
+    kind |= line.startsWith("+")
       ? ChangeKinds.Addition
       : line.startsWith("-")
         ? ChangeKinds.Removal
-        : undefined;
+        : ChangeKinds.None;
 
-    if (lineKind === undefined) continue;
-    if (kind !== undefined && kind !== lineKind) return ChangeKinds.Mixed;
-    kind = lineKind;
+    if (kind === ChangeKinds.Mixed) break;
   }
 
-  return kind ?? ChangeKinds.Addition;
+  return kind;
 }
 
 function filePathFromDiff(diff: string, index: number): string {
