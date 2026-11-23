@@ -17,7 +17,7 @@ editors update the unstaged changes indicator without polling.
 ## Install
 
 _Big Cat_ has not yet been published on NPM.
-If you'd like to try it, you can install it from GIT directly:
+If you'd like to try it, you can install it directly from GitHub:
 
 ```sh
 npm install git+https://github.com/VanuPhantom/big-cat
