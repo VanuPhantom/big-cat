@@ -50,6 +50,15 @@ function relativeDate(value: string): string {
   return `${days}d ago`;
 }
 
+function isUnavailable(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "type" in error &&
+    error.type === "rpc.unavailable"
+  );
+}
+
 function splitFileDiffs(diff: string): string[] {
   const files = diff.split(/(?=^diff --git )/m).filter(Boolean);
   return files.length > 0 ? files : [diff];
@@ -67,35 +76,57 @@ export function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
   let refreshing = false;
   let refreshQueued = false;
   let disposed = false;
+  // The server half of Big Cat registers its RPC asynchronously, so calls
+  // made while OpenCode is starting up can fail with `rpc.unavailable`.
+  let unavailableTimer: ReturnType<typeof setTimeout> | undefined;
+  let unavailableDelay = 250;
+  const maxUnavailableDelay = 8_000;
   const refresh = () => {
+    clearTimeout(unavailableTimer);
+    unavailableTimer = undefined;
     refreshQueued = true;
     if (refreshing || disposed) return;
     refreshing = true;
     setLoading(true);
     void (async () => {
+      let unavailable = false;
       while (refreshQueued && !disposed) {
         refreshQueued = false;
+        unavailable = false;
         const requestedDirectory = directory();
         setError("");
         try {
           const next = (await client().log({
             directory: requestedDirectory,
           })) as GitLog;
+          unavailableDelay = 250;
           if (requestedDirectory !== directory()) {
             refreshQueued = true;
           } else if (!disposed) {
             setLog(next);
           }
-        } catch {
+        } catch (cause) {
           if (requestedDirectory !== directory()) {
             refreshQueued = true;
+          } else if (
+            isUnavailable(cause) &&
+            unavailableDelay <= maxUnavailableDelay
+          ) {
+            unavailable = true;
           } else if (!disposed) {
             setError("Could not load GIT log. Try refreshing Big Cat.");
           }
         }
       }
       refreshing = false;
-      if (!disposed) setLoading(false);
+      if (disposed) return;
+      if (unavailable) {
+        // Stay in the loading state while waiting for the server to register.
+        unavailableTimer = setTimeout(refresh, unavailableDelay);
+        unavailableDelay *= 2;
+        return;
+      }
+      setLoading(false);
     })();
   };
 
@@ -224,6 +255,7 @@ export function GitLogSidebar(props: { openDiff: (diff: DiffPanel) => void }) {
     onCleanup(() => {
       disposed = true;
       clearTimeout(refreshTimer);
+      clearTimeout(unavailableTimer);
       offGitChange();
       offFileChange();
     });
