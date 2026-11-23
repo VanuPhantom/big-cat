@@ -79,3 +79,28 @@ npm run check
 Big Cat requires GIT to be installed. Outside a GIT repository, it displays a
 friendly empty-state message instead of running any GIT commands that mutate
 the working tree.
+
+### Tests
+
+```sh
+npm test               # everything
+npm run test:watchers  # the server's GIT watchers, on Node
+npm run test:e2e       # end-to-end, on Bun
+```
+
+The end-to-end tests in `test/e2e` follow the approach of OpenCode's own TUI
+plugin tests. Each test creates a throwaway GIT repository (with your global
+GIT configuration ignored). It then loads _both_ halves of Big Cat, the server
+plugin and the TUI plugin, into a miniature OpenCode host
+(`test/e2e/harness/host.tsx`). The test renders the TUI with OpenTUI's
+`testRender` and drives it with the mouse and keyboard while changing the
+repository from the outside. Nothing in Big Cat is stubbed: GIT, the
+filesystem watchers, and the UI are all real. The host's RPC bridge checks every
+call and event against the schemas in `src/rpc.ts`.
+
+OpenTUI's test renderer needs [Bun](https://bun.sh). If you have OpenCode but
+not Bun, the Bun runtime that OpenCode ships with works too:
+
+```sh
+BUN_BE_BUN=1 opencode test --timeout 20000
+```
