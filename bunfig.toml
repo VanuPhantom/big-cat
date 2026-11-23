@@ -1,0 +1,5 @@
+# Bun runs the end-to-end tests (see test/e2e). OpenTUI's Solid preload
+# compiles the plugin's TSX the same way OpenCode does when it loads plugins.
+[test]
+preload = ["@opentui/solid/preload"]
+root = "test/e2e"

@@ -14,8 +14,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "tsc --noEmit",
-    "test": "tsc --noEmit false --outDir .big-cat-test && node --test test/*.test.mjs"
+    "check": "tsc --noEmit && tsc --noEmit -p test/e2e",
+    "test": "npm run test:watchers && npm run test:e2e",
+    "test:watchers": "tsc --noEmit false --outDir .big-cat-test && node --test test/*.test.mjs",
+    "test:e2e": "bun test --timeout 20000"
   },
   "keywords": [
     "opencode",
